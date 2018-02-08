@@ -8,16 +8,24 @@ df_sources = pd.read_csv('sources.csv')
 df_sources_en = df_sources.query("language=='en'")
 
 fromdate = '2017-01-01'
-todate = '2018-12-31'
+todate = '2018-02-07'
 
-for i, id in enumerate(df_sources_en.id):
-    if i < 2:
-        everything = newsapi.get_everything(sources=[id],from_parameter=fromdate,to=todate,sort_by='publishedAt',page_size=1)
+requestcount = 0
+totalrequests = 100
+
+def get_and_count(requestcount, **kwargs):
+    everything = newsapi.get_everything(**kwargs)
+    requestcount += 1
+    return everything, requestcount
+
+while requestcount < totalrequests:
+    for i, id in enumerate(df_sources_en.id):
+        everything, requestcount = get_and_count(requestcount, sources=[id],from_parameter=fromdate,to=todate,sort_by='publishedAt',page_size=1)
         totalResults = everything['totalResults']
         j = 0
         page = 1
-        while (j<totalResults) & (page<10):
-            everything = newsapi.get_everything(sources=[id],from_parameter=fromdate,to=todate,sort_by='publishedAt',page_size=100,page=page)
+        while j < totalResults:
+            everything, requestcount = get_and_count(requestcount, sources=[id],from_parameter=fromdate,to=todate,sort_by='publishedAt',page_size=100,page=page)
             articles_df = pd.DataFrame(everything['articles'])
             articles_df.source = articles_df.source.apply(lambda x: x['id'])
             articles_df.publishedAt = pd.to_datetime(articles_df.publishedAt)
