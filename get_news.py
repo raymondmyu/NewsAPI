@@ -26,49 +26,60 @@ if __name__=='__main__':
     df_sources = pd.read_csv('sources.csv')
     df_sources_en = df_sources.query("language=='en'").sort_values('id').set_index('id')
 
-    fromdate = sys.argv[1]
-    todate = sys.argv[2]
-    totalrequests = int(sys.argv[3])
-    fname = sys.argv[4]
+    # fromdate, todate, totalrequests, fname = '2018-02-09', '2018-02-09', 100, '2018-02-09to2018-02-09.db'
 
-    if os.path.exists(fname):
-        sqlite = sa.create_engine('sqlite:///{}'.format(fname)).connect()
+    fromdate, todate, totalrequests, fname = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+
+    sqlite = sa.create_engine('sqlite:///{}'.format(fname)).connect()
+
+    if sqlite.execute("select name from sqlite_master where type=='table' and name=='all_articles'").fetchone():
         last_source, last_date = get_last_article(sqlite)
         todate = last_date.strftime('%Y-%m-%d %H:%M:%S')
         df_sources_en = df_sources_en.loc[last_source:]
-    else:
-        sqlite = sa.create_engine('sqlite:///{}'.format(fname)).connect()
 
     ids = df_sources_en.index
 
     requestcount = 0
     for id in ids:
-        if requestcount > totalrequests: break
         print('Getting current source from', id)
+        # Find total number of Results
         everything, requestcount = get_and_count(requestcount, sources=[id], from_parameter=fromdate, to=todate,
-                                                 sort_by='publishedAt', page_size=1)
+                                                 sort_by='publishedAt', page_size=100, page=1)
         totalResults = everything['totalResults']
-        numresults = 0
+        print('Total Results:',totalResults)
+
+        numresults = 1
         page = 1
-        while (numresults < totalResults) & (requestcount <= totalrequests):
+        while (numresults <= totalResults) & (requestcount <= totalrequests):
             print(requestcount)
-            everything, requestcount = get_and_count(requestcount, sources=[id], from_parameter=fromdate, to=todate,
-                                                     sort_by='publishedAt', page_size=100, page=page)
+            if page > 1:
+                everything, requestcount = get_and_count(requestcount, sources=[id], from_parameter=fromdate, to=todate,
+                                                         sort_by='publishedAt', page_size=100, page=page)
+                if len(everything['articles']) == 0:
+                    break
 
             articles_df = pd.DataFrame(everything['articles'])
             articles_df.source = articles_df.source.apply(lambda x: x['id'])
             articles_df.publishedAt = pd.to_datetime(articles_df.publishedAt)
-            if numresults == 0:
+            if numresults == 1:
                 cur_source_articles = articles_df
             else:
                 cur_source_articles = cur_source_articles.append(articles_df, ignore_index=True)
             cur_source_articles.drop_duplicates(inplace=True)
 
-            if (requestcount % 10 == 0) & (requestcount > 0):
-                print('Writing to', fname)
-                cur_source_articles.to_sql('all_articles', sqlite, index=False, if_exists='append')
-
             numresults += articles_df.shape[0]
             page += 1
+
+        print('Writing to sqlite')
+        cur_source_articles.to_sql('all_articles', sqlite, index=False, if_exists='append')
+
+        if requestcount > totalrequests:
+            print('Removing duplicates from sqlite')
+            sqlite.execute("create table all_articles_temp as select distinct * from all_articles")
+            sqlite.execute("drop table all_articles")
+            sqlite.execute("create table all_articles as select * from all_articles_temp")
+            sqlite.execute("drop table all_articles_temp")
+            break
+
 
 
