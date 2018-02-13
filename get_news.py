@@ -55,8 +55,11 @@ if __name__=='__main__':
             if page > 1:
                 everything, requestcount = get_and_count(requestcount, sources=[id], from_parameter=fromdate, to=todate,
                                                          sort_by='publishedAt', page_size=100, page=page)
-                if len(everything['articles']) == 0:
-                    break
+            if 'articles' not in everything.keys():
+                page += 1
+                continue
+            elif len(everything['articles']) == 0:
+                break
 
             articles_df = pd.DataFrame(everything['articles'])
             articles_df.source = articles_df.source.apply(lambda x: x['id'])
