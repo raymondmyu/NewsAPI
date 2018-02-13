@@ -51,10 +51,10 @@ if __name__=='__main__':
         numresults = 1
         page = 1
         while (numresults <= totalResults) & (requestcount <= totalrequests):
-            print(requestcount)
             if page > 1:
                 everything, requestcount = get_and_count(requestcount, sources=[id], from_parameter=fromdate, to=todate,
                                                          sort_by='publishedAt', page_size=100, page=page)
+            print(requestcount)
             if 'articles' not in everything.keys():
                 page += 1
                 continue
