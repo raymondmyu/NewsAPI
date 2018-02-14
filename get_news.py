@@ -28,7 +28,7 @@ if __name__=='__main__':
 
     # fromdate, todate, totalrequests, fname = '2018-02-09', '2018-02-09', 100, '2018-02-09to2018-02-09.db'
 
-    fromdate, todate, totalrequests, fname = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+    fromdate, todate_orig, totalrequests, fname = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
 
     sqlite = sa.create_engine('sqlite:///{}'.format(fname)).connect()
 
@@ -41,6 +41,7 @@ if __name__=='__main__':
 
     requestcount = 0
     for id in ids:
+        todate = todate_orig
         print('Getting current source from', id)
         # Find total number of Results
         everything, requestcount = get_and_count(requestcount, sources=[id], from_parameter=fromdate, to=todate,
@@ -50,15 +51,16 @@ if __name__=='__main__':
 
         numresults = 1
         page = 1
-        while (numresults <= totalResults) & (requestcount <= totalrequests):
-            if page > 1:
+        i = 0
+        while (numresults <= totalResults) & (requestcount < totalrequests):
+            if page == 100:
+                page = 1
+                todate = articles_df.publishedAt.min().strftime('%Y-%m-%d %H:%M:%S')
+            if i > 0:
                 everything, requestcount = get_and_count(requestcount, sources=[id], from_parameter=fromdate, to=todate,
                                                          sort_by='publishedAt', page_size=100, page=page)
             print(requestcount)
-            if 'articles' not in everything.keys():
-                page += 1
-                continue
-            elif len(everything['articles']) == 0:
+            if len(everything['articles']) == 0:
                 break
 
             articles_df = pd.DataFrame(everything['articles'])
@@ -72,11 +74,12 @@ if __name__=='__main__':
 
             numresults += articles_df.shape[0]
             page += 1
+            i += 1
 
         print('Writing to sqlite')
         cur_source_articles.to_sql('all_articles', sqlite, index=False, if_exists='append')
 
-        if requestcount > totalrequests:
+        if requestcount >= totalrequests:
             print('Removing duplicates from sqlite')
             sqlite.execute("create table all_articles_temp as select distinct * from all_articles")
             sqlite.execute("drop table all_articles")
